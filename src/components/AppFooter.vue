@@ -19,15 +19,13 @@
       class="text-caption text-disabled"
       style="position: absolute; right: 16px;"
     >
-      &copy; {{ (new Date()).getFullYear() }} <span class="d-none d-sm-inline-block">Embrapa</span>
-      —
+      &copy; 2024 &bull;
       <a
         class="text-decoration-none on-surface"
-        href="https://vuetifyjs.com/about/licensing/"
+        href="https://embrapa.br"
         rel="noopener noreferrer"
-        target="_blank"
-      >
-        MIT License
+        target="_blank">
+        Embrapa
       </a>
     </div>
   </v-footer>
