@@ -155,7 +155,7 @@
                   <v-text-field v-model="newTest.latencyUpload" label="Latência ⬆" suffix="ms" outlined disabled></v-text-field>
                 </v-col>
                 <v-col cols="4">
-                  <v-text-field v-model="newTest.aimGaming" outlined disabled prepend-inner-icon="mdi-controller"></v-text-field>
+                  <v-text-field v-model="newTest.aimGaming" outlined disabled prepend-inner-icon="mdi-controller" :color="aimColors[newTest.aimGaming]"></v-text-field>
                 </v-col>
                 <v-col cols="4">
                   <v-text-field v-model="newTest.aimRTC" outlined disabled prepend-inner-icon="mdi-message-text"></v-text-field>
@@ -168,6 +168,7 @@
                 </v-col>
               </v-row>
             </v-card-text>
+            <v-alert v-model="alert" type="warning" class="mx-2">Parece que você está OFFLINE! Você pode verificar sua conexão e tentar EXECUTAR O TESTE novamente (botão acima) ou REGISTRAR este resultado (botão abaixo).</v-alert>
             <v-card-actions>
               <v-btn
                 color="error"
@@ -185,7 +186,7 @@
                 append-icon="mdi-check"
                 color="success"
                 @click="() => $refs.stepper.next()"
-                :disabled="false">
+                :disabled="newTest.connection === null">
                 Registrar
               </v-btn>
             </v-card-actions>
@@ -203,10 +204,12 @@ import { useDisplay } from 'vuetify'
 import helpers from '@/helpers'
 import geo from 'vue3-geolocation'
 import speed from '@cloudflare/speedtest'
+import { round } from 'lodash'
 
 const dialogAdd = ref(false)
 const step = ref(1)
 const loading = ref(false)
+const alert = ref(false)
 
 const userName = localStorage.getItem('userName') ?? ''
 
@@ -230,7 +233,7 @@ const { xs } = useDisplay()
 
 const mapUrl = helpers.getMapUrl(-47.716863, -15.598093, 12)
 
-console.log('URLLL: '+ mapUrl)
+console.log('URL: '+ mapUrl)
 
 const zoom = 2
 
@@ -275,34 +278,51 @@ const clearNewTest = () => {
   }
 }
 
+const aimColors = ref({
+  bad: 'red-darken-1',
+  poor: 'orange-darken-2',
+  average: 'light-blue-darken-2',
+  good: 'teal-darken-1',
+  great: 'green-darken-2'
+})
+
 const runTest = () => {
+  if (!window.navigator.onLine) {
+    newTest.value.connection = false
+
+    alert.value = true
+
+    return
+  }
+
   loading.value = true
 
   new speed().onFinish = results => {
-    console.log('summary:')
-    console.log(results.getSummary())
+    newTest.value.connection = true
 
-    console.log('scores:')
-    console.log(results.getScores())
+    const summary = results.getSummary()
+    const scores = results.getScores()
 
-// Bad
-// Poor
-// Average
-// Good
-// Great
+    newTest.value.download = parseFloat((summary.download / 1000000).toFixed(2))
+    newTest.value.upload = parseFloat((summary.upload / 1000000).toFixed(2))
 
-    console.log('download:')
-    console.log(results.getDownloadBandwidth())
+    newTest.value.latencyDownload = round(summary.downLoadedLatency)
+    newTest.value.latencyUpload = round(summary.upLoadedLatency)
 
-    console.log('upload:')
-    console.log(results.getUploadBandwidth())
-
-    console.log('latency:')
-    console.log(results.getDownLoadedLatency())
+    newTest.value.aimGaming = scores.gaming.classificationName
+    newTest.value.aimRTC = scores.rtc.classificationName
+    newTest.value.aimStreaming = scores.streaming.classificationName
 
     loading.value = false
   }
 }
+
+const register = () => {
+  // https://dexie.org/docs/Tutorial/Vue
+  // localStorage.setItem('darkMode', JSON.stringify(isDarkMode.value))
+}
+
+// Bad, Poor, Average, Good, Great
 
 // import { db } from '@/db'
 
