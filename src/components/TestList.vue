@@ -6,18 +6,30 @@
       <v-btn prepend-icon="mdi-plus" color="success" @click="dialogAdd = true">Adicionar</v-btn>
     </v-toolbar-items>
   </v-toolbar>
-  <v-container fluid>
+  <v-container v-if="tests.length === 0">
+    <v-alert
+      color="info"
+      border="start"
+      variant="tonal"
+      class="mx-3 my-6">
+      Não há nenhum teste aguardando para ser enviado! Sempre que clicar em "Enviar",
+      os testes registrados serão enviados para o servidor e apagados do dispositivo.
+      Para iniciar um novo teste, clique em "Adicionar".
+    </v-alert>
+  </v-container>
+  <v-container v-else fluid>
     <v-row>
-      <v-col xs="12" sm="6" lg="4" xl="3" v-for="n in 30" :key="n">
+      <v-col xs="12" sm="6" lg="4" xl="3" v-for="t in tests" :key="t.id">
         <v-card border flat>
           <v-list-item class="pl-2 pr-4" height="88">
             <template v-slot:title>
-              <v-card-title class="pb-0">Experimento iLPF do João</v-card-title>
-              <v-card-subtitle>13/8/24 8h32</v-card-subtitle>
+              <v-card-title class="pb-0">{{ t.label }}</v-card-title>
+              <v-card-subtitle>{{ formatDate(t.date) }}</v-card-subtitle>
             </template>
 
             <template v-slot:append>
-              <v-icon size="32" icon="mdi-cloud-check-variant" color="success"></v-icon>
+              <v-icon v-if="t.connection" size="32" icon="mdi-cloud-check-variant" color="success"></v-icon>
+              <v-icon v-else size="32" icon="mdi-cloud-off" color="error"></v-icon>
             </template>
           </v-list-item>
 
@@ -26,11 +38,13 @@
           <v-card-actions class="text-medium-emphasis pb-0">
             <v-list-item class="w-50">
               <template v-slot:prepend><v-icon size="32" icon="mdi-cloud-download" color="info" /></template>
-              <v-list-item-title class="text-h5 font-weight-black">25 Mbps</v-list-item-title>
+              <v-list-item-title class="text-h5 font-weight-black">{{ t.download }} Mbps</v-list-item-title>
+              <v-list-item-subtitle>{{ t.latencyDownload }} ms</v-list-item-subtitle>
             </v-list-item>
             <v-list-item class="w-50" color="error">
               <template v-slot:prepend><v-icon size="32" icon="mdi-cloud-upload" color="warning" /></template>
-              <v-list-item-title class="text-h5 font-weight-black">2 Mbps</v-list-item-title>
+              <v-list-item-title class="text-h5 font-weight-black">{{ t.upload }} Mbps</v-list-item-title>
+              <v-list-item-subtitle>{{ t.latencyUpload }} ms</v-list-item-subtitle>
             </v-list-item>
           </v-card-actions>
 
@@ -41,7 +55,7 @@
                 class="mb-1"
                 color="info"
                 height="10"
-                model-value="37"
+                :model-value="t.download"
                 rounded="pill"
               />
             </v-list-item>
@@ -51,13 +65,13 @@
                 class="mb-1"
                 color="warning"
                 height="10"
-                model-value="67"
+                :model-value="t.upload"
                 rounded="pill"
               />
             </v-list-item>
           </v-card-actions>
 
-          <v-img :src="mapUrl" />
+          <v-img :src="t.tile" />
         </v-card>
       </v-col>
     </v-row>
@@ -155,16 +169,22 @@
                   <v-text-field v-model="newTest.latencyUpload" label="Latência ⬆" suffix="ms" outlined disabled></v-text-field>
                 </v-col>
                 <v-col cols="4">
-                  <v-text-field v-model="newTest.aimGaming" outlined disabled prepend-inner-icon="mdi-controller" :color="aimColors[newTest.aimGaming]"></v-text-field>
+                  <v-text-field v-model="newTest.aimGaming" outlined disabled prepend-inner-icon="mdi-controller" :class="'text-' + aimColors[newTest.aimGaming]"></v-text-field>
                 </v-col>
                 <v-col cols="4">
-                  <v-text-field v-model="newTest.aimRTC" outlined disabled prepend-inner-icon="mdi-message-text"></v-text-field>
+                  <v-text-field v-model="newTest.aimRTC" outlined disabled prepend-inner-icon="mdi-message-text" :class="'text-' + aimColors[newTest.aimRTC]"></v-text-field>
                 </v-col>
                 <v-col cols="4">
-                  <v-text-field v-model="newTest.aimStreaming" outlined disabled prepend-inner-icon="mdi-movie-open"></v-text-field>
+                  <v-text-field v-model="newTest.aimStreaming" outlined disabled prepend-inner-icon="mdi-movie-open" :class="'text-' + aimColors[newTest.aimStreaming]"></v-text-field>
                 </v-col>
                 <v-col cols="12">
-                  <v-btn size="x-large" prepend-icon="mdi-clock-fast" @click="runTest" color="info" :loading="loading" block>Executar Teste</v-btn>
+                  <v-btn size="x-large" prepend-icon="mdi-clock-fast" @click="runTest" color="info" :loading="loading" block>
+                    Executar Teste
+                    <template v-slot:loader>
+                      <v-progress-circular indeterminate></v-progress-circular>
+                      <span class="ml-3 text-body-2">Aguarde! Pode demorar vários minutos...</span>
+                    </template>
+                  </v-btn>
                 </v-col>
               </v-row>
             </v-card-text>
@@ -185,8 +205,9 @@
                 variant="tonal"
                 append-icon="mdi-check"
                 color="success"
-                @click="() => $refs.stepper.next()"
-                :disabled="newTest.connection === null">
+                @click="save()"
+                :disabled="newTest.connection === null"
+                :loading="saving">
                 Registrar
               </v-btn>
             </v-card-actions>
@@ -199,17 +220,24 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { db } from '@/db'
+import { ref, onMounted } from 'vue'
 import { useDisplay } from 'vuetify'
 import helpers from '@/helpers'
 import geo from 'vue3-geolocation'
 import speed from '@cloudflare/speedtest'
 import { round } from 'lodash'
+import axios from 'axios'
+import { Buffer } from 'buffer'
+import moment from 'moment'
 
+const tests = ref([])
 const dialogAdd = ref(false)
-const step = ref(1)
 const loading = ref(false)
+const saving = ref(false)
 const alert = ref(false)
+
+const { xs } = useDisplay()
 
 const userName = localStorage.getItem('userName') ?? ''
 
@@ -224,18 +252,13 @@ const newTest = ref({
   upload: 0,
   latencyDownload: 0,
   latencyUpload: 0,
-  aimGaming: 0,
-  aimRTC: 0,
-  aimStreaming: 0
+  aimGaming: '-',
+  aimRTC: '-',
+  aimStreaming: '-',
+  tile: ''
 })
 
-const { xs } = useDisplay()
-
 const mapUrl = helpers.getMapUrl(-47.716863, -15.598093, 12)
-
-console.log('URL: '+ mapUrl)
-
-const zoom = 2
 
 const getCoordinates = () => {
 
@@ -246,8 +269,6 @@ const getCoordinates = () => {
     timeout: 10000,
     maximumAge: 0
   }).then(coordinates => {
-    console.log(coordinates)
-
     newTest.value.latitude = coordinates.lat
     newTest.value.longitude = coordinates.lng
 
@@ -272,18 +293,19 @@ const clearNewTest = () => {
     upload: 0,
     latencyDownload: 0,
     latencyUpload: 0,
-    aimGaming: 0,
-    aimRTC: 0,
-    aimStreaming: 0
+    aimGaming: '-',
+    aimRTC: '-',
+    aimStreaming: '-',
+    tile: ''
   }
 }
 
 const aimColors = ref({
-  bad: 'red-darken-1',
-  poor: 'orange-darken-2',
-  average: 'light-blue-darken-2',
-  good: 'teal-darken-1',
-  great: 'green-darken-2'
+  bad: 'red-lighten-4',
+  poor: 'orange-lighten-4',
+  average: 'light-blue-lighten-4',
+  good: 'teal-lighten-4',
+  great: 'green-lighten-4'
 })
 
 const runTest = () => {
@@ -317,14 +339,49 @@ const runTest = () => {
   }
 }
 
-const register = () => {
-  // https://dexie.org/docs/Tutorial/Vue
-  // localStorage.setItem('darkMode', JSON.stringify(isDarkMode.value))
+const save = () => {
+  saving.value = true
+
+  localStorage.setItem('userName', newTest.value.user)
+
+  const tile = helpers.getMapUrl(newTest.value.longitude, newTest.value.latitude, 12)
+
+  axios.get(tile, { responseType: 'arraybuffer' }).then(response => {
+    newTest.value.tile = 'data:image/png;base64,' + Buffer.from(response.data, 'binary').toString('base64')
+
+    newTest.value.date = new Date()
+
+    const clone = JSON.parse(JSON.stringify(newTest.value))
+
+    // https://dexie.org/docs/Tutorial/Vue
+
+    db.tests.add(clone).then(() => {
+      dialogAdd.value = false
+
+      refresh()
+
+      clearNewTest()
+    }).catch(error => {
+      console.error(error)
+    }).finally(() => {
+      saving.value = false
+    })
+  }).catch(error => {
+    console.error(error)
+  })
 }
 
-// Bad, Poor, Average, Good, Great
+const refresh = () => {
+  db.tests.toArray().then(t => {
+    tests.value = t
+  }).catch(error => {
+    console.error(error)
+  })
+}
 
-// import { db } from '@/db'
+onMounted(() => {
+  refresh()
+})
 
-// const tests = ref([])
+const formatDate = date => moment(date).format('D/M/YY H:mm')
 </script>
