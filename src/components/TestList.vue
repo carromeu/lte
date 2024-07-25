@@ -1,8 +1,18 @@
 <template>
   <v-toolbar>
     <v-toolbar-title>LTE Test</v-toolbar-title>
+
+    <v-progress-linear
+      :active="synching"
+      :indeterminate="synching"
+      color="warning"
+      absolute
+      bottom
+      location="bottom"
+    />
+
     <v-toolbar-items>
-      <v-btn prepend-icon="mdi-cloud-upload-outline" color="warning">Enviar</v-btn>
+      <v-btn prepend-icon="mdi-cloud-upload-outline" color="warning" @click="dialogLogin = true" :loading="synching">Enviar</v-btn>
       <v-btn prepend-icon="mdi-plus" color="success" @click="dialogAdd = true">Adicionar</v-btn>
     </v-toolbar-items>
   </v-toolbar>
@@ -188,7 +198,7 @@
                 </v-col>
               </v-row>
             </v-card-text>
-            <v-alert v-model="alert" type="warning" class="mx-2">Parece que você está OFFLINE! Você pode verificar sua conexão e tentar EXECUTAR O TESTE novamente (botão acima) ou REGISTRAR este resultado (botão abaixo).</v-alert>
+            <v-alert v-model="alert" type="warning" class="mx-2 mb-2">Parece que você está OFFLINE! Você pode verificar sua conexão e tentar EXECUTAR O TESTE novamente (botão acima) ou REGISTRAR este resultado (botão abaixo).</v-alert>
             <v-card-actions>
               <v-btn
                 color="error"
@@ -217,6 +227,64 @@
 
     </v-card>
   </v-dialog>
+
+  <v-dialog
+    v-model="dialogLogin"
+    max-width="600">
+    <v-card prepend-icon="mdi-cloud-key" title="Autenticação e Envio">
+      <v-card-text class="pb-0 pt-3">
+        <v-row dense>
+          <v-col cols="12">
+            <v-text-field v-model="username" variant="outlined" label="Usuário" prepend-inner-icon="mdi-account" required></v-text-field>
+          </v-col>
+          <v-col cols="12">
+            <v-text-field
+              v-model="password"
+              variant="outlined"
+              label="Senha"
+              prepend-inner-icon="mdi-lock"
+              required
+              :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"
+              @click:append-inner="visible = !visible"
+              :type="visible ? 'text' : 'password'">
+            </v-text-field>
+          </v-col>
+        </v-row>
+      </v-card-text>
+      <v-card-actions class="px-6 pb-6">
+        <v-btn
+          color="error"
+          text
+          @click="dialogLogin = false"
+          size="large">
+          Cancelar
+        </v-btn>
+
+        <v-spacer></v-spacer>
+
+        <v-btn
+          size="large"
+          variant="tonal"
+          append-icon="mdi-cloud-upload-outline"
+          color="success"
+          @click="sync()"
+          :disabled="username.trim() === '' || password.trim() === ''">
+          Enviar
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-snackbar
+    v-model="snackbar.show"
+    bottom
+    :color="snackbar.color"
+    :timeout="12000">
+    {{ snackbar.text }}
+    <template v-slot:actions>
+      <v-btn icon="$close" variant="text" @click="snackbar.show = false"></v-btn>
+    </template>
+  </v-snackbar>
 </template>
 
 <script setup>
@@ -228,22 +296,33 @@ import geo from 'vue3-geolocation'
 import speed from '@cloudflare/speedtest'
 import { round } from 'lodash'
 import axios from 'axios'
+import { uuid } from 'vue-uuid'
 import { Buffer } from 'buffer'
 import moment from 'moment'
 
 const tests = ref([])
 const dialogAdd = ref(false)
+const dialogLogin = ref(false)
 const loading = ref(false)
 const saving = ref(false)
+const synching = ref(false)
 const alert = ref(false)
+const username = ref(localStorage.getItem('username') ?? '')
+const password = ref(localStorage.getItem('password') ?? '')
+const visible = ref(false)
+const snackbar = ref({
+  show: false,
+  text: '',
+  color: ''
+})
 
 const { xs } = useDisplay()
 
-const userName = localStorage.getItem('userName') ?? ''
+let tester = localStorage.getItem('tester') ?? ''
 
 const newTest = ref({
   label: '',
-  user: userName,
+  user: tester,
   date: null,
   latitude: 0,
   longitude: 0,
@@ -284,7 +363,7 @@ const cancel = () => {
 const clearNewTest = () => {
   newTest.value = {
     label: '',
-    user: userName,
+    user: tester,
     date: null,
     latitude: 0,
     longitude: 0,
@@ -342,7 +421,8 @@ const runTest = () => {
 const save = () => {
   saving.value = true
 
-  localStorage.setItem('userName', newTest.value.user)
+  tester = newTest.value.user
+  localStorage.setItem('tester', newTest.value.user)
 
   const tile = helpers.getMapUrl(newTest.value.longitude, newTest.value.latitude, 12)
 
@@ -384,4 +464,67 @@ onMounted(() => {
 })
 
 const formatDate = date => moment(date).format('D/M/YY H:mm')
+
+const sync = () => {
+  localStorage.setItem('username', username.value)
+  localStorage.setItem('password', password.value)
+
+  dialogLogin.value = false
+
+  if (!window.navigator.onLine) {
+    message('Você está OFFLINE!', 'warning')
+
+    return
+  }
+
+  synching.value = true
+
+  const err = error => {
+    console.log(error)
+
+    synching.value = false
+
+    refresh()
+
+    message('Erro ao tentar sincronizar!', 'error')
+  }
+
+  const auth = {
+    username: username.value,
+    password: password.value
+  }
+
+  axios.get(import.meta.env.VITE_API, { timeout: 2000 }).then(response => {
+    const api = import.meta.env.VITE_API + '/' + import.meta.env.VITE_DB
+
+    db.tests.toArray().then(t => {
+      const promises = []
+
+      t.forEach(test => {
+        const clone = JSON.parse(JSON.stringify(test))
+
+        delete clone.id
+        delete clone.tile
+
+        promises.push(axios.put(api + '/' + uuid.v1(), clone, { auth }))
+
+        axios.all(promises).then(() => {
+          db.tests.clear()
+
+          refresh()
+
+          synching.value = false
+
+          message('Testes enviados com sucesso!', 'success')
+        }).catch(err)
+      })
+    }).catch(err)
+  }).catch(err)
+}
+
+const message = (text, color) => {
+  snackbar.value.show = true
+  snackbar.value.text = text
+  snackbar.value.color = color
+}
 </script>
