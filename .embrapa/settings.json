@@ -1,0 +1,19 @@
+{
+  "boilerplate": "_",
+  "platform": "javascript",
+  "label": "",
+  "description": "",
+  "references": [],
+  "maintainers": [],
+  "variables": {
+    "default": [
+      { "name": "PORT", "type": "PORT" },
+      { "name": "VITE_API", "type": "TEXT", "value": "https://coachdb.backend.com" },
+      { "name": "VITE_DB", "type": "TEXT", "value": "lte" }
+    ],
+    "alpha": [],
+    "beta": [],
+    "release": []
+  },
+  "orchestrators": [ "DockerCompose", "DockerSwarm" ]
+}

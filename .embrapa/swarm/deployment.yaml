@@ -1,0 +1,24 @@
+version: '3.9'
+
+services:
+  pwa:
+    image: 127.0.0.1:5000/${IO_PROJECT}_${IO_APP}_${IO_STAGE}_pwa
+    ports:
+      - ${PORT}:80
+    networks:
+      - stack
+    healthcheck:
+      test: curl --fail -s http://localhost:80/ || exit 1
+      interval: 1m30s
+      timeout: 10s
+      start_period: 30s
+      retries: 4
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+
+networks:
+  stack:
+    external: true
+    name: ${IO_PROJECT}_${IO_APP}_${IO_STAGE}
