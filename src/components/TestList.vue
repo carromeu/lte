@@ -12,8 +12,21 @@
     />
 
     <v-toolbar-items>
-      <v-btn prepend-icon="mdi-cloud-upload-outline" color="warning" @click="dialogLogin = true" :loading="synching">Enviar</v-btn>
-      <v-btn prepend-icon="mdi-plus" color="success" @click="dialogAdd = true">Adicionar</v-btn>
+      <v-btn
+        prepend-icon="mdi-cloud-upload-outline"
+        color="warning"
+        @click="dialogLogin = true"
+        :loading="synching"
+        :disabled="tests.length === 0">
+        Enviar
+      </v-btn>
+
+      <v-btn
+        prepend-icon="mdi-plus"
+        color="success"
+        @click="dialogAdd = true">
+        Adicionar
+      </v-btn>
     </v-toolbar-items>
   </v-toolbar>
   <v-container v-if="tests.length === 0">
