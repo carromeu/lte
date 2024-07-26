@@ -3,6 +3,7 @@ import Components from 'unplugin-vue-components/vite'
 import Vue from '@vitejs/plugin-vue'
 import Vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
 import ViteFonts from 'unplugin-fonts/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // Utilities
 import { defineConfig } from 'vite'
@@ -25,6 +26,28 @@ export default defineConfig({
         }],
       },
     }),
+    VitePWA({
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'LTE Test',
+        short_name: 'LTE Test',
+        description: 'Projeto de Conectividade: Teste de Velocidade da Rede 4G LTE 700Mhz Privada',
+        theme_color: '#424242',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      }
+    })
   ],
   define: { 'process.env': {} },
   resolve: {
