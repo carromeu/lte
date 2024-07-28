@@ -77,3 +77,9 @@ This project is built with [Vuetify](https://vuetifyjs.com/en/), a UI Library wi
 [MIT](http://opensource.org/licenses/MIT)
 
 Copyright (c) 2016-present Vuetify, LLC
+
+- ~ver questão do offline e da imagem de localização~
+- ~mudar o nome: teste de conectividade~
+- tentar obter a rede na qual o device está conectado
+- ~registrar o jitter e outros dados de latência~
+- ~alterar ícone de jogo para drone~
