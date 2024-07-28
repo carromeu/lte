@@ -1,6 +1,9 @@
 <template>
   <v-toolbar>
-    <v-toolbar-title>LTE Test</v-toolbar-title>
+    <v-toolbar-title>
+      <v-icon>mdi-wan</v-icon>
+      <span v-show="!xs" class="ml-3">Teste de Conectividade</span>
+    </v-toolbar-title>
 
     <v-progress-linear
       :active="synching"
@@ -94,7 +97,7 @@
             </v-list-item>
           </v-card-actions>
 
-          <v-img :src="t.tile" />
+          <v-img :src="t.tile === null ? noMap : t.tile" aspect-ratio="1"></v-img>
         </v-card>
       </v-col>
     </v-row>
@@ -137,16 +140,16 @@
             <v-card-text class="px-2">
               <v-row dense>
                 <v-col cols="12">
-                  <v-text-field v-model="newTest.label" label="Nome da Área de Teste" hint="Ex.: Experimento iLPF do João" outlined></v-text-field>
+                  <v-text-field v-model="newTest.label" label="Nome da Área de Teste" hint="Ex.: Experimento iLPF do João" outlined prepend-inner-icon="mdi-land-plots-marker"></v-text-field>
                 </v-col>
                 <v-col cols="12">
-                  <v-text-field v-model="newTest.user" label="Seu Nome" hint="Ex.: Maria da Silva" outlined></v-text-field>
+                  <v-text-field v-model="newTest.user" label="Seu Nome" hint="Ex.: Maria da Silva" outlined prepend-inner-icon="mdi-badge-account"></v-text-field>
                 </v-col>
                 <v-col cols="6" sm="4">
-                  <v-text-field v-model="newTest.latitude" label="Latitude" outlined disabled></v-text-field>
+                  <v-text-field v-model="newTest.latitude" label="Latitude" outlined disabled prepend-inner-icon="mdi-latitude"></v-text-field>
                 </v-col>
                 <v-col cols="6" sm="4">
-                  <v-text-field v-model="newTest.longitude" label="Longitude" outlined disabled></v-text-field>
+                  <v-text-field v-model="newTest.longitude" label="Longitude" outlined disabled prepend-inner-icon="mdi-longitude"></v-text-field>
                 </v-col>
                 <v-col cols="12" sm="4">
                   <v-btn size="x-large" prepend-icon="mdi-map-marker" @click="getCoordinates" color="info" :loading="loading" block>Obter GPS</v-btn>
@@ -192,7 +195,7 @@
                   <v-text-field v-model="newTest.latencyUpload" label="Latência ⬆" suffix="ms" outlined disabled></v-text-field>
                 </v-col>
                 <v-col cols="4">
-                  <v-text-field v-model="newTest.aimGaming" outlined disabled prepend-inner-icon="mdi-controller" :class="'text-' + aimColors[newTest.aimGaming]"></v-text-field>
+                  <v-text-field v-model="newTest.aimGaming" outlined disabled prepend-inner-icon="mdi-quadcopter" :class="'text-' + aimColors[newTest.aimGaming]"></v-text-field>
                 </v-col>
                 <v-col cols="4">
                   <v-text-field v-model="newTest.aimRTC" outlined disabled prepend-inner-icon="mdi-message-text" :class="'text-' + aimColors[newTest.aimRTC]"></v-text-field>
@@ -205,7 +208,7 @@
                     Executar Teste
                     <template v-slot:loader>
                       <v-progress-circular indeterminate></v-progress-circular>
-                      <span class="ml-3 text-body-2">Aguarde! Pode demorar vários minutos...</span>
+                      <span class="ml-3 text-body-2">Aguarde! Pode demorar algum tempo...</span>
                     </template>
                   </v-btn>
                 </v-col>
@@ -312,6 +315,7 @@ import axios from 'axios'
 import { uuid } from 'vue-uuid'
 import { Buffer } from 'buffer'
 import moment from 'moment'
+import noMap from '@/assets/no-map.png'
 
 const tests = ref([])
 const dialogAdd = ref(false)
@@ -342,12 +346,16 @@ const newTest = ref({
   connection: null,
   download: 0,
   upload: 0,
+  latency: 0,
   latencyDownload: 0,
   latencyUpload: 0,
+  jitter: 0,
+  jitterDownload: 0,
+  jitterUpload: 0,
   aimGaming: '-',
   aimRTC: '-',
   aimStreaming: '-',
-  tile: ''
+  tile: null
 })
 
 const mapUrl = helpers.getMapUrl(-47.716863, -15.598093, 12)
@@ -383,13 +391,19 @@ const clearNewTest = () => {
     connection: null,
     download: 0,
     upload: 0,
+    latency: 0,
     latencyDownload: 0,
     latencyUpload: 0,
+    jitter: 0,
+    jitterDownload: 0,
+    jitterUpload: 0,
     aimGaming: '-',
     aimRTC: '-',
     aimStreaming: '-',
-    tile: ''
+    tile: null
   }
+
+  alert.value = false
 }
 
 const aimColors = ref({
@@ -417,11 +431,18 @@ const runTest = () => {
     const summary = results.getSummary()
     const scores = results.getScores()
 
+    console.log(summary)
+
     newTest.value.download = parseFloat((summary.download / 1000000).toFixed(2))
     newTest.value.upload = parseFloat((summary.upload / 1000000).toFixed(2))
 
+    newTest.value.latency = round(summary.latency)
     newTest.value.latencyDownload = round(summary.downLoadedLatency)
     newTest.value.latencyUpload = round(summary.upLoadedLatency)
+
+    newTest.value.jitter = round(summary.jitter)
+    newTest.value.jitterDownload = round(summary.downLoadedJitter)
+    newTest.value.jitterUpload = round(summary.upLoadedJitter)
 
     newTest.value.aimGaming = scores.gaming.classificationName
     newTest.value.aimRTC = scores.rtc.classificationName
@@ -437,11 +458,13 @@ const save = () => {
   tester = newTest.value.user
   localStorage.setItem('tester', newTest.value.user)
 
+  const timeout = window.navigator.onLine ? 15000 : 0
+
   const tile = helpers.getMapUrl(newTest.value.longitude, newTest.value.latitude, 12)
 
-  axios.get(tile, { responseType: 'arraybuffer' }).then(response => {
+  axios.get(tile, { responseType: 'arraybuffer', timeout: timeout }).then(response => {
     newTest.value.tile = 'data:image/png;base64,' + Buffer.from(response.data, 'binary').toString('base64')
-
+  }).finally(() => {
     newTest.value.date = new Date()
 
     const clone = JSON.parse(JSON.stringify(newTest.value))
@@ -455,12 +478,10 @@ const save = () => {
 
       clearNewTest()
     }).catch(error => {
-      console.error(error)
+      message('Não foi possível salvar!', 'error')
     }).finally(() => {
       saving.value = false
     })
-  }).catch(error => {
-    console.error(error)
   })
 }
 
